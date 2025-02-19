@@ -1,0 +1,72 @@
+name: Build, Tag, and Prepare for JitPack
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up JDK 17 and Maven Cache
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Run Maven Unit Tests
+        run: mvn test
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up JDK 17 and Maven Cache
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Build the Package (JAR)
+        run: mvn package
+
+  tag:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Determine Version from POM
+        id: get_version
+        run: |
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Detected version: $VERSION"
+
+      - name: Create Git Tag if Not Exists
+        id: create_tag
+        run: |
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+              echo "Tag v$VERSION already exists"
+          else
+              git tag -a "v$VERSION" -m "Release version $VERSION"
+              git push origin --tags
+          fi
+
+  jitpack:
+    needs: tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify JitPack
+        run: echo "Tag v$VERSION pushed. JitPack will build and publish your artifact automatically."
